@@ -1,0 +1,2228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIS-CAF | Comissão de Avaliação e Fiscalização</title>
+  
+  <!-- Configurações PWA (Aplicativo) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#082f49">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SIS-CAF">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2966/2966327.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    [x-cloak] { display: none !important; }
+
+    .area-papel-impressao { display: none; }
+
+    @media print {
+      body {
+        background-color: white !important;
+        color: black !important;
+      }
+      header, main, .no-print, [role="dialog"], .fixed {
+        display: none !important;
+      }
+      body.imprimindo-demanda #folha-impressao-demanda {
+        display: block !important;
+        width: 100% !important;
+      }
+      body.imprimindo-dossie #folha-impressao-dossie {
+        display: block !important;
+        width: 100% !important;
+      }
+      body.imprimindo-relatorio #folha-impressao-relatorio {
+        display: block !important;
+        width: 100% !important;
+      }
+    }
+  </style>
+</head>
+<body 
+  class="bg-slate-100 text-slate-800 font-sans antialiased" 
+  :class="{
+    'imprimindo-demanda': modoImpressao === 'demanda',
+    'imprimindo-dossie': modoImpressao === 'dossie',
+    'imprimindo-relatorio': modoImpressao === 'relatorio'
+  }"
+  x-data="cafApp()" 
+  x-init="iniciarApp()">
+
+  <!-- Notificações Toast Flutuantes -->
+  <div class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none no-print">
+    <template x-for="t in toasts" :key="t.id">
+      <div 
+        class="pointer-events-auto p-4 rounded-xl shadow-lg border text-sm flex items-start gap-3 transition-all transform duration-300"
+        :class="{
+          'bg-emerald-50 border-emerald-200 text-emerald-800': t.tipo === 'sucesso',
+          'bg-rose-50 border-rose-200 text-rose-800': t.tipo === 'erro',
+          'bg-sky-50 border-sky-200 text-sky-800': t.tipo === 'info'
+        }">
+        <i class="mt-0.5 text-base" :class="{
+          'fa-solid fa-circle-check text-emerald-600': t.tipo === 'sucesso',
+          'fa-solid fa-circle-xmark text-rose-600': t.tipo === 'erro',
+          'fa-solid fa-circle-info text-sky-600': t.tipo === 'info'
+        }"></i>
+        <div class="flex-1 font-medium" x-text="t.mensagem"></div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Cabeçalho -->
+  <header class="bg-sky-950 text-white shadow-md border-b border-sky-800 no-print">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-sky-900 rounded-lg border border-sky-700 shadow-inner">
+          <i class="fa-solid fa-shield-halved text-2xl text-sky-400"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight">SIS-CAF</h1>
+          <p class="text-xs text-sky-200 uppercase tracking-wider font-medium">Comissão de Avaliação e Fiscalização</p>
+        </div>
+      </div>
+
+      <!-- Seletor de Módulos -->
+      <div class="flex items-center bg-sky-900 p-1 rounded-xl border border-sky-700 flex-wrap justify-center gap-1">
+        <button 
+          @click="mudarAba('fiscalizacoes')" 
+          :class="abaAtiva === 'fiscalizacoes' ? 'bg-sky-600 text-white shadow' : 'text-sky-200 hover:text-white'"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-clipboard-list"></i> Fiscalizações
+        </button>
+        <button 
+          @click="mudarAba('fluxo')" 
+          :class="abaAtiva === 'fluxo' ? 'bg-sky-600 text-white shadow' : 'text-sky-200 hover:text-white'"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-user-gear"></i> Fluxo & Setores
+        </button>
+        <button 
+          @click="mudarAba('indicadores')" 
+          :class="abaAtiva === 'indicadores' ? 'bg-sky-600 text-white shadow' : 'text-sky-200 hover:text-white'"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-chart-pie"></i> Indicadores
+        </button>
+        <button 
+          @click="mudarAba('calendario')" 
+          :class="abaAtiva === 'calendario' ? 'bg-sky-600 text-white shadow' : 'text-sky-200 hover:text-white'"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-calendar-days"></i> Calendário
+        </button>
+        <button 
+          @click="mudarAba('contatos')" 
+          :class="abaAtiva === 'contatos' ? 'bg-sky-600 text-white shadow' : 'text-sky-200 hover:text-white'"
+          class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-address-book"></i> Agenda
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap justify-center">
+        <button @click="abrirModalNovaVisita()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg font-semibold text-xs sm:text-sm flex items-center transition shadow-sm">
+          <i class="fa-solid fa-location-dot mr-1.5"></i> Agendar Visita
+        </button>
+        <button @click="abrirModalReuniao()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg font-semibold text-xs sm:text-sm flex items-center transition shadow-sm">
+          <i class="fa-solid fa-calendar-plus mr-1.5"></i> Agendar Reunião
+        </button>
+        <button @click="abrirRelatorioMensal()" class="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-2 rounded-lg font-medium text-xs sm:text-sm flex items-center transition shadow-sm">
+          <i class="fa-solid fa-file-contract mr-1.5"></i> Relatório
+        </button>
+        <button @click="abrirModalNovaUnidade()" class="bg-sky-900 hover:bg-sky-800 border border-sky-700 text-white px-3 py-2 rounded-lg font-medium text-xs sm:text-sm flex items-center transition shadow-sm">
+          <i class="fa-solid fa-hospital mr-1.5"></i> Unidades
+        </button>
+        <button @click="abrirNovoModal()" class="bg-sky-600 hover:bg-sky-500 text-white px-3.5 py-2 rounded-lg font-semibold text-xs sm:text-sm flex items-center transition shadow">
+          <i class="fa-solid fa-plus mr-1.5"></i> Nova Demanda
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8 no-print">
+    
+    <!-- Banner de Conexão Render -->
+    <div x-show="conectandoRender" x-cloak class="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 text-amber-900 text-sm rounded-lg flex items-center justify-between shadow-sm">
+      <div class="flex items-center gap-3">
+        <i class="fa-solid fa-satellite-dish fa-bounce text-amber-600 text-lg"></i>
+        <div>
+          <span class="font-bold">Conectando ao banco de dados:</span> O servidor está acordando do repouso...
+        </div>
+      </div>
+      <i class="fa-solid fa-spinner fa-spin text-amber-700"></i>
+    </div>
+
+    <!-- ==================== ABA 1: FISCALIZAÇÕES ==================== -->
+    <div x-show="abaAtiva === 'fiscalizacoes'" x-cloak>
+      
+      <!-- Matriz de Risco / Alerta Prioritário -->
+      <div x-show="alertasPrioritarios.length > 0" class="mb-8 p-4 bg-rose-50 border-l-4 border-rose-600 rounded-xl shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
+            </span>
+            <h3 class="font-bold text-sm text-rose-900 uppercase tracking-wide">
+              Matriz de Gravidade e Alerta Imediato (<span x-text="alertasPrioritarios.length"></span>)
+            </h3>
+          </div>
+          <span class="text-[11px] text-rose-700 font-medium bg-rose-100 px-2 py-0.5 rounded">Risco Crítico / MP / Vencimento Iminente</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <template x-for="item in alertasPrioritarios" :key="item.id">
+            <div class="bg-white p-3.5 rounded-lg border border-rose-200 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-start gap-2 mb-1">
+                  <span class="font-bold text-xs text-slate-800" x-text="item.protocolo"></span>
+                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" :class="badgeSetorClasse(obterSetor(item))" x-text="obterSetor(item)"></span>
+                </div>
+                <p class="text-xs text-slate-600 truncate font-medium" x-text="item.unidade_nome || 'Unidade Geral'"></p>
+                <p class="text-[11px] text-slate-500 line-clamp-1 mt-0.5" x-text="limparTextoDescricao(item.descricao)"></p>
+              </div>
+
+              <div class="flex justify-between items-center mt-3 pt-2 border-t border-slate-100 text-xs">
+                <span class="font-mono text-[11px] text-rose-700 font-semibold" x-text="'Prazo: ' + formatarData(item.prazo_fatal)"></span>
+                <div class="flex gap-2">
+                  <button @click="iniciarEdicao(item)" class="text-xs font-bold text-amber-700 hover:underline">Editar</button>
+                  <button @click="visualizarDemanda(item)" class="text-xs font-bold text-sky-700 hover:underline">Tratar &rarr;</button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Tabela Principal -->
+      <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex flex-col gap-4">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h2 class="font-bold text-lg text-slate-800">Mapa Operacional de Fiscalizações da CAF</h2>
+              <p class="text-xs text-slate-500">Segregação por setor: Assistencial, Contábil/Financeiro, Recursos Humanos, Jurídico e Arquivologia</p>
+            </div>
+            <button @click="exportarParaCSV()" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm transition">
+              <i class="fa-solid fa-file-excel text-sm"></i> Exportar Relatório (CSV)
+            </button>
+          </div>
+
+          <!-- Filtros por Setor da CAF -->
+          <div class="flex flex-wrap items-center gap-1.5 text-xs font-semibold border-b border-slate-100 pb-3">
+            <span class="text-slate-500 mr-1">Setor:</span>
+            <button @click="filtroSetor = 'todos'" :class="filtroSetor === 'todos' ? 'bg-sky-950 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">Todos</button>
+            <template x-for="s in setoresCAF" :key="s">
+              <button @click="filtroSetor = s" :class="filtroSetor === s ? 'bg-sky-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition" x-text="s"></button>
+            </template>
+          </div>
+
+          <!-- Filtros Rápidos (Tabs) -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div class="flex flex-wrap gap-1.5 text-xs font-medium">
+              <button @click="filtroRapido = 'todos'" :class="filtroRapido === 'todos' ? 'bg-sky-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">Ativos</button>
+              <button @click="filtroRapido = 'visitas'" :class="filtroRapido === 'visitas' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+                <i class="fa-solid fa-location-dot"></i> Visitas in loco (<span x-text="todasVisitasInLoco.length"></span>)
+              </button>
+              <button @click="filtroRapido = 'vencidos'" :class="filtroRapido === 'vencidos' ? 'bg-rose-700 text-white' : 'bg-slate-100 text-rose-700 hover:bg-rose-50'" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> Vencidos / Alerta
+              </button>
+              <button @click="filtroRapido = 'andamento'" :class="filtroRapido === 'andamento' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">Em Andamento</button>
+              <button @click="filtroRapido = 'concluidas'" :class="filtroRapido === 'concluidas' ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">Concluídas</button>
+              <button @click="filtroRapido = 'os'" :class="filtroRapido === 'os' ? 'bg-purple-800 text-white' : 'bg-slate-100 text-purple-700 hover:bg-purple-50'" class="px-3 py-1.5 rounded-lg transition">Só O.S.</button>
+              <button @click="filtroRapido = 'municipio'" :class="filtroRapido === 'municipio' ? 'bg-sky-700 text-white' : 'bg-slate-100 text-sky-700 hover:bg-sky-50'" class="px-3 py-1.5 rounded-lg transition">Só Município</button>
+              <button @click="filtroRapido = 'arquivadas'" :class="filtroRapido === 'arquivadas' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                <i class="fa-solid fa-box-archive"></i> Arquivadas (<span x-text="demandasArquivadas.length"></span>)
+              </button>
+            </div>
+
+            <div class="w-full sm:w-72 relative">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+              <input type="text" x-model="busca" placeholder="Pesquisar protocolo, setor, auditor, unidade..." class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-50 text-slate-600 text-xs font-semibold uppercase tracking-wider border-b border-slate-200">
+                <th class="p-4">Protocolo / Origem</th>
+                <th class="p-4">Setor CAF</th>
+                <th class="p-4">Unidade Alvo</th>
+                <th class="p-4">Gestão</th>
+                <th class="p-4">Tipo / Eixo</th>
+                <th class="p-4">Responsável</th>
+                <th class="p-4">Data e Horário</th>
+                <th class="p-4">Situação</th>
+                <th class="p-4 text-center">Docs/Drive</th>
+                <th class="p-4 text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <template x-if="carregando">
+                <tr>
+                  <td colspan="10" class="p-8 text-center text-slate-500">
+                    <i class="fa-solid fa-spinner fa-spin mr-2 text-sky-600"></i> Sincronizando registros...
+                  </td>
+                </tr>
+              </template>
+              <template x-for="d in demandasFiltradas" :key="d.id">
+                <tr class="hover:bg-slate-50 transition" :class="d.status === 'Arquivada' ? 'bg-slate-50/70 opacity-75' : ''">
+                  <td class="p-4">
+                    <div class="font-bold text-slate-800" x-text="d.protocolo"></div>
+                    <span class="text-xs text-slate-500" x-text="d.origem"></span>
+                  </td>
+                  <td class="p-4">
+                    <span class="px-2 py-0.5 rounded text-xs font-bold border" :class="badgeSetorClasse(obterSetor(d))" x-text="obterSetor(d)"></span>
+                  </td>
+                  <td class="p-4">
+                    <div class="font-medium text-slate-700" x-text="d.unidade_nome || 'Unidade Geral'"></div>
+                  </td>
+                  <td class="p-4">
+                    <span class="px-2 py-0.5 rounded text-xs font-semibold"
+                      :class="obterEsferaGestao(d) === 'Organização Social (OS)' ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-sky-100 text-sky-700 border border-sky-200'"
+                      x-text="obterEsferaGestao(d)">
+                    </span>
+                  </td>
+                  <td class="p-4">
+                    <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      :class="d.tipo_fiscalizacao === 'Visita in loco' ? 'bg-amber-100 text-amber-800 border border-amber-300 font-bold' : 'bg-slate-100 text-slate-700 border border-slate-200'"
+                      x-text="d.tipo_fiscalizacao"></span>
+                  </td>
+                  <td class="p-4">
+                    <span class="font-medium text-xs text-slate-700" x-text="d.responsavel_atribuido || 'Não atribuído'"></span>
+                  </td>
+                  <td class="p-4">
+                    <div class="font-mono text-xs font-semibold" x-text="formatarDataComHora(d.prazo_fatal, d.descricao)"></div>
+                    <div class="mt-1" x-html="renderizarBadgePrazo(d.prazo_fatal, d.status)"></div>
+                  </td>
+                  <td class="p-4">
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full"
+                      :class="{
+                        'bg-slate-200 text-slate-800 border border-slate-300': d.status === 'Arquivada',
+                        'bg-emerald-100 text-emerald-700': d.status === 'Concluída',
+                        'bg-amber-100 text-amber-700': d.status === 'Em andamento',
+                        'bg-blue-100 text-blue-700': d.status === 'Triagem'
+                      }"
+                      x-text="d.status"></span>
+                  </td>
+                  
+                  <td class="p-4 text-center">
+                    <template x-if="obterLinkDrive(d)">
+                      <a :href="obterLinkDrive(d)" target="_blank" class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-600 hover:text-white border border-sky-300 transition shadow-sm" title="Abrir pasta de fotos e laudos no Google Drive">
+                        <i class="fa-brands fa-google-drive text-sm"></i>
+                      </a>
+                    </template>
+                    <template x-if="!obterLinkDrive(d)">
+                      <span class="text-slate-300 text-xs">-</span>
+                    </template>
+                  </td>
+
+                  <td class="p-4 text-center">
+                    <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                      <button @click="visualizarDemanda(d)" class="text-slate-700 hover:text-sky-700 text-xs font-semibold px-2 py-1 border border-slate-300 rounded hover:bg-slate-100 transition" title="Detalhes e Despachos">
+                        <i class="fa-regular fa-eye"></i>
+                      </button>
+
+                      <button 
+                        @click="avancarStatus(d)" 
+                        class="text-xs font-semibold px-2 py-1 border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-600 hover:text-white rounded transition flex items-center gap-1" 
+                        title="Avançar situação: Triagem ➔ Em andamento ➔ Concluída">
+                        <i class="fa-solid fa-arrows-rotate text-[10px]"></i> Mudar
+                      </button>
+                      
+                      <button 
+                        @click="alternarArquivamento(d)" 
+                        class="text-xs font-semibold px-2 py-1 border rounded transition flex items-center gap-1"
+                        :class="d.status === 'Arquivada' ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100' : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'"
+                        :title="d.status === 'Arquivada' ? 'Desarquivar e reativar processo' : 'Arquivar processo'">
+                        <i class="fa-solid" :class="d.status === 'Arquivada' ? 'fa-box-open' : 'fa-box-archive'"></i>
+                        <span x-text="d.status === 'Arquivada' ? 'Reativar' : 'Arquivar'"></span>
+                      </button>
+
+                      <button @click="iniciarEdicao(d)" class="text-amber-700 hover:text-amber-900 text-xs font-semibold px-2 py-1 border border-amber-300 rounded hover:bg-amber-50 transition" title="Editar">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                      </button>
+                      <button @click="excluirDemanda(d.id, d.protocolo)" class="text-xs bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 px-2 py-1 rounded transition" title="Excluir">
+                        <i class="fa-regular fa-trash-can"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- ==================== ABA 2: FLUXO DE TRABALHO & SETORES ==================== -->
+    <div x-show="abaAtiva === 'fluxo'" x-cloak class="space-y-6">
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-network-wired text-sky-700"></i> Fluxo de Trabalho por Setor da CAF
+          </h2>
+          <p class="text-xs text-slate-500">Acompanhamento segregado por Assistencial, Contábil/Financeiro, Recursos Humanos, Jurídico e Arquivologia</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="(dados, setorNome) in fluxoPorSetor" :key="setorNome">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 border-b mb-3">
+                <div class="flex items-center gap-2.5">
+                  <span class="w-8 h-8 rounded-full bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-xs">
+                    <i class="fa-solid fa-layer-group"></i>
+                  </span>
+                  <div>
+                    <h3 class="font-bold text-sm text-slate-800" x-text="setorNome"></h3>
+                    <span class="text-[11px] text-slate-400">Setor da Comissão (CAF)</span>
+                  </div>
+                </div>
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200" x-text="dados.total + ' proc.'"></span>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2 text-center text-xs mb-3">
+                <div class="p-2 bg-slate-50 rounded border">
+                  <span class="text-[10px] text-slate-500 block">Ativos</span>
+                  <strong class="text-amber-700" x-text="dados.emAndamento"></strong>
+                </div>
+                <div class="p-2 bg-slate-50 rounded border">
+                  <span class="text-[10px] text-slate-500 block">Críticos</span>
+                  <strong class="text-rose-700" x-text="dados.criticos"></strong>
+                </div>
+                <div class="p-2 bg-slate-50 rounded border">
+                  <span class="text-[10px] text-slate-500 block">Concluídos</span>
+                  <strong class="text-emerald-700" x-text="dados.concluidos"></strong>
+                </div>
+              </div>
+
+              <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                <template x-for="p in dados.processos.filter(x => x.status !== 'Concluída' && x.status !== 'Arquivada').slice(0, 4)" :key="p.id">
+                  <div class="p-1.5 bg-slate-50 border rounded text-[11px] flex justify-between items-center hover:bg-slate-100 cursor-pointer" @click="iniciarEdicao(p)">
+                    <span class="font-bold text-slate-700 truncate max-w-[170px]" x-text="p.protocolo"></span>
+                    <span class="text-[10px] text-slate-400" x-text="formatarDataComHora(p.prazo_fatal, p.descricao)"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <div class="pt-3 border-t mt-3 flex justify-between items-center text-xs">
+              <span class="text-[11px] text-slate-500">Filtrar setor:</span>
+              <button @click="filtrarPorSetor(setorNome)" class="text-sky-700 hover:text-sky-900 font-bold">Ver Todos &rarr;</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 3: INDICADORES (CHART.JS) ==================== -->
+    <div x-show="abaAtiva === 'indicadores'" x-cloak class="space-y-6">
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div>
+          <h2 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-chart-line text-sky-600"></i> Painel Gerencial & Inteligência — SIS-CAF
+          </h2>
+          <p class="text-xs text-slate-500">Métricas consolidadas por setor da CAF, eixo temático e classificação de risco</p>
+        </div>
+        <button @click="atualizarGraficos()" class="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+          <i class="fa-solid fa-arrows-rotate"></i> Recarregar Dados
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 class="font-bold text-xs text-slate-700 uppercase tracking-wider mb-1">Demandas por Setor CAF</h3>
+            <p class="text-[11px] text-slate-400 mb-4">Segregação entre os 5 setores da comissão</p>
+          </div>
+          <div class="h-60 relative flex items-center justify-center">
+            <canvas id="chartGestao"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 class="font-bold text-xs text-slate-700 uppercase tracking-wider mb-1">Eixo Temático Fiscalizado</h3>
+            <p class="text-[11px] text-slate-400 mb-4">Distribuição por eixo de avaliação e fiscalização</p>
+          </div>
+          <div class="h-60 relative flex items-center justify-center">
+            <canvas id="chartEixos"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 class="font-bold text-xs text-slate-700 uppercase tracking-wider mb-1">Classificação de Risco</h3>
+            <p class="text-[11px] text-slate-400 mb-4">Gravidade e criticidade do estoque de demandas</p>
+          </div>
+          <div class="h-60 relative flex items-center justify-center">
+            <canvas id="chartRisco"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ABA 4: CALENDÁRIO COM FERIADOS ==================== -->
+    <div x-show="abaAtiva === 'calendario'" x-cloak class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+              <span class="p-2 bg-emerald-100 text-emerald-800 rounded-lg"><i class="fa-solid fa-calendar-day text-lg"></i></span>
+              <h2 class="font-bold text-base text-slate-800 capitalize" x-text="nomeMesAtual"></h2>
+            </div>
+            <div class="flex items-center gap-1">
+              <button @click="mudarMes(-1)" class="p-2 border rounded-lg hover:bg-slate-100 text-slate-600 text-xs"><i class="fa-solid fa-chevron-left"></i></button>
+              <button @click="irParaMesAtual()" class="px-3 py-1.5 border rounded-lg hover:bg-slate-100 text-slate-700 text-xs font-semibold">Hoje</button>
+              <button @click="mudarMes(1)" class="p-2 border rounded-lg hover:bg-slate-100 text-slate-600 text-xs"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-4 text-[11px] text-slate-500 mb-3 px-1 flex-wrap">
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Feriados Oficiais (Nacional / RJ / Saquarema)</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Reunião</span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Visita in loco</span>
+          </div>
+
+          <div class="grid grid-cols-7 gap-1 text-center font-bold text-xs text-slate-500 mb-2">
+            <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+          </div>
+
+          <div class="grid grid-cols-7 gap-1">
+            <template x-for="(diaObj, idx) in diasCalendario" :key="idx">
+              <div 
+                @click="selecionarDiaCalendario(diaObj.dataIso)"
+                class="min-h-[86px] p-1.5 border rounded-lg flex flex-col justify-between transition cursor-pointer relative"
+                :class="{
+                  'bg-slate-50 opacity-40': !diaObj.mesmoMes,
+                  'border-rose-400 bg-rose-50/50': diaObj.feriado && diaObj.mesmoMes && diaObj.dataIso !== diaSelecionadoIso,
+                  'border-emerald-500 bg-emerald-50/40 ring-2 ring-emerald-300': diaObj.dataIso === diaSelecionadoIso,
+                  'ring-2 ring-sky-300 border-sky-400': diaObj.ehHoje && diaObj.dataIso !== diaSelecionadoIso,
+                  'hover:border-slate-400 bg-white': diaObj.mesmoMes && !diaObj.feriado && diaObj.dataIso !== diaSelecionadoIso
+                }">
+                <div class="flex justify-between items-center">
+                  <span class="text-xs font-bold" :class="diaObj.feriado ? 'text-rose-700' : (diaObj.ehHoje ? 'text-sky-700 underline' : 'text-slate-700')" x-text="diaObj.numeroDia"></span>
+                  <div class="flex items-center gap-1">
+                    <span x-show="diaObj.feriado" class="text-[9px] px-1 py-0.2 bg-rose-100 text-rose-700 border border-rose-300 rounded font-bold" title="Feriado">F</span>
+                    <span x-show="obterCompromissosDoDia(diaObj.dataIso).length > 0" class="text-[10px] font-bold px-1.5 py-0.2 bg-sky-800 text-white rounded-full" x-text="obterCompromissosDoDia(diaObj.dataIso).length"></span>
+                  </div>
+                </div>
+
+                <div class="space-y-1 mt-1 overflow-hidden">
+                  <template x-if="diaObj.feriado">
+                    <div class="text-[9px] truncate px-1 py-0.5 rounded bg-rose-100 text-rose-800 font-bold border border-rose-200" :title="diaObj.feriado.nome" x-text="diaObj.feriado.nome"></div>
+                  </template>
+
+                  <template x-for="r in obterCompromissosDoDia(diaObj.dataIso).slice(0, 2)" :key="r.id">
+                    <div 
+                      class="text-[10px] truncate px-1 py-0.5 rounded font-medium flex items-center gap-1"
+                      :class="r.tipo_fiscalizacao === 'Visita in loco' ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-emerald-100 text-emerald-900 border border-emerald-200'"
+                      :title="r.protocolo">
+                      <span class="font-mono text-[9px] font-bold" x-text="extrairHora(r.prazo_fatal, r.descricao) || ''"></span>
+                      <span class="truncate" x-text="r.protocolo"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-3 pb-2 border-b">
+              <span class="text-xs font-bold text-slate-700 uppercase flex items-center gap-1">
+                <i class="fa-solid fa-clock text-emerald-600"></i>
+                <span x-text="diaSelecionadoIso ? 'Agenda em ' + formatarData(diaSelecionadoIso) : 'Próximos Compromissos'"></span>
+              </span>
+              <div class="flex gap-1">
+                <button @click="abrirModalReuniao(diaSelecionadoIso)" class="text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  + Reunião
+                </button>
+                <button @click="abrirModalNovaVisita('', diaSelecionadoIso)" class="text-[11px] font-bold text-amber-700 hover:bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                  + Visita
+                </button>
+              </div>
+            </div>
+
+            <div x-show="feriadoDoDiaSelecionado" class="mb-3 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs">
+              <i class="fa-solid fa-calendar-check text-rose-600 text-base mt-0.5"></i>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-rose-600 tracking-wider block" x-text="feriadoDoDiaSelecionado?.tipo"></span>
+                <strong class="text-rose-950 font-bold text-sm block" x-text="feriadoDoDiaSelecionado?.nome"></strong>
+                <span class="text-[11px] text-rose-700" x-text="feriadoDoDiaSelecionado?.descricao"></span>
+              </div>
+            </div>
+
+            <div class="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+              <template x-for="r in compromissosFiltradosLateral" :key="r.id">
+                <div class="p-3 bg-slate-50 hover:bg-slate-100 border rounded-xl transition space-y-1.5">
+                  <div class="flex justify-between items-start gap-1">
+                    <div>
+                      <span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase inline-block mb-0.5" :class="badgeSetorClasse(obterSetor(r))" x-text="obterSetor(r)"></span>
+                      <h4 class="font-bold text-xs text-slate-800 leading-snug" x-text="r.protocolo"></h4>
+                    </div>
+                    <div class="text-right">
+                      <span class="text-[11px] font-mono font-bold text-slate-800 bg-white border px-1.5 py-0.5 rounded shadow-sm inline-block" x-text="extrairHora(r.prazo_fatal, r.descricao) ? extrairHora(r.prazo_fatal, r.descricao) + 'h' : 'Horário livre'"></span>
+                      <span class="text-[10px] text-slate-400 block mt-0.5" x-text="formatarData(r.prazo_fatal)"></span>
+                    </div>
+                  </div>
+
+                  <p class="text-xs text-slate-600 line-clamp-2" x-text="limparTextoDescricao(r.descricao)"></p>
+
+                  <div class="flex justify-between items-center text-[11px] text-slate-500 pt-1.5 border-t border-slate-200">
+                    <span class="truncate max-w-[140px]"><i class="fa-solid fa-user-tie mr-1 text-slate-400"></i><span x-text="r.responsavel_atribuido || 'Equipe CAF'"></span></span>
+                    <div class="flex items-center gap-2">
+                      <button @click="editarCompromisso(r)" class="text-amber-700 hover:underline font-bold"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                      <button @click="excluirDemanda(r.id, r.protocolo)" class="text-rose-600 hover:underline font-bold"><i class="fa-regular fa-trash-can"></i> Excluir</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t mt-4 flex gap-2">
+            <button @click="abrirModalReuniao(diaSelecionadoIso)" class="flex-1 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-calendar-plus"></i> Nova Reunião
+            </button>
+            <button @click="abrirModalNovaVisita('', diaSelecionadoIso)" class="flex-1 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-location-dot"></i> Nova Visita
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== ABA 5: AGENDA DE CONTATOS ==================== -->
+    <div x-show="abaAtiva === 'contatos'" x-cloak class="space-y-6">
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <h2 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-address-book text-sky-700"></i> Agenda de Contatos Institucionais & Saúde
+          </h2>
+          <p class="text-xs text-slate-500">Membros dos 5 setores da CAF, direção de unidades e organizações sociais</p>
+        </div>
+        <button @click="abrirModalNovoContato()" class="bg-sky-700 hover:bg-sky-600 text-white px-3.5 py-2 rounded-lg font-semibold text-xs sm:text-sm flex items-center transition shadow-sm">
+          <i class="fa-solid fa-user-plus mr-1.5"></i> Novo Contato
+        </button>
+      </div>
+
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+        <div class="flex flex-wrap gap-1.5 text-xs font-medium">
+          <button @click="filtroCategoriaContato = 'todos'" :class="filtroCategoriaContato === 'todos' ? 'bg-sky-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">Todos</button>
+          <button @click="filtroCategoriaContato = 'Organização Social'" :class="filtroCategoriaContato === 'Organização Social' ? 'bg-sky-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">Organização Social</button>
+          <button @click="filtroCategoriaContato = 'Direção Hospitalar'" :class="filtroCategoriaContato === 'Direção Hospitalar' ? 'bg-sky-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">Direção Hospitalar</button>
+          <button @click="filtroCategoriaContato = 'Órgãos de Controle'" :class="filtroCategoriaContato === 'Órgãos de Controle' ? 'bg-sky-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg transition">Órgãos de Controle</button>
+        </div>
+
+        <div class="w-full sm:w-72 relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+          <input type="text" x-model="buscaContatos" placeholder="Pesquisar por nome, cargo ou órgão..." class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sky-500">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="c in contatosFiltrados" :key="c.id">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+            <div>
+              <div class="flex justify-between items-start gap-2 mb-2 pb-2 border-b">
+                <div>
+                  <h3 class="font-bold text-sm text-slate-800" x-text="c.nome"></h3>
+                  <p class="text-xs font-semibold text-sky-700" x-text="c.cargo"></p>
+                </div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border" x-text="c.categoria"></span>
+              </div>
+
+              <div class="space-y-1.5 text-xs text-slate-600 mt-2">
+                <p class="font-medium text-slate-700 flex items-center gap-1.5">
+                  <i class="fa-solid fa-building text-slate-400 w-4"></i>
+                  <span x-text="c.orgao_unidade || c.orgao_setor || 'Não informado'"></span>
+                </p>
+                <p x-show="c.telefone" class="flex items-center gap-1.5">
+                  <i class="fa-solid fa-phone text-slate-400 w-4"></i>
+                  <a :href="'tel:' + c.telefone" class="hover:text-sky-700 font-mono text-xs" x-text="c.telefone"></a>
+                </p>
+                <p x-show="c.email" class="flex items-center gap-1.5">
+                  <i class="fa-solid fa-envelope text-slate-400 w-4"></i>
+                  <a :href="'mailto:' + c.email" class="hover:text-sky-700 text-xs truncate max-w-[220px]" x-text="c.email"></a>
+                </p>
+                <p x-show="c.observacao" class="text-[11px] text-slate-500 italic mt-2 pt-2 border-t border-slate-100 line-clamp-2" x-text="c.observacao"></p>
+              </div>
+            </div>
+
+            <div class="flex justify-between items-center mt-4 pt-3 border-t border-slate-100 text-xs">
+              <div class="flex gap-2">
+                <template x-if="c.telefone">
+                  <a :href="'https://wa.me/55' + c.telefone.replace(/\D/g, '')" target="_blank" class="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-semibold transition flex items-center gap-1">
+                    <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp
+                  </a>
+                </template>
+              </div>
+              <div class="flex gap-2">
+                <button @click="iniciarEdicaoContato(c)" class="text-amber-700 hover:underline font-bold text-xs">Editar</button>
+                <button @click="excluirContato(c.id, c.nome)" class="text-rose-600 hover:underline font-bold text-xs">Excluir</button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- MODAL: CADASTRAR / EDITAR CONTATO -->
+    <div x-show="modalContatoAberto" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak>
+      <div class="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto" @click.away="modalContatoAberto = false">
+        <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+          <span class="p-1.5 bg-sky-100 text-sky-800 rounded-lg text-sm"><i class="fa-solid fa-user-plus"></i></span>
+          <span x-text="editandoContatoId ? 'Editar Contato' : 'Cadastrar Novo Contato'"></span>
+        </h3>
+
+        <form @submit.prevent="salvarContato" class="space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Nome Completo *</label>
+              <input type="text" x-model="formContato.nome" required class="w-full border rounded px-3 py-1.5 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Cargo / Função *</label>
+              <input type="text" x-model="formContato.cargo" required class="w-full border rounded px-3 py-1.5 text-sm">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Órgão / Unidade / Setor CAF *</label>
+              <input type="text" x-model="formContato.orgao_unidade" required class="w-full border rounded px-3 py-1.5 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Categoria *</label>
+              <select x-model="formContato.categoria" class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+                <option value="Organização Social">Organização Social</option>
+                <option value="Direção Hospitalar">Direção Hospitalar</option>
+                <option value="Órgãos de Controle">Órgãos de Controle</option>
+                <option value="Atenção Básica">Atenção Básica</option>
+                <option value="Outros">Outros</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Telefone / Celular</label>
+              <input type="text" x-model="formContato.telefone" class="w-full border rounded px-3 py-1.5 text-sm font-mono">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">E-mail Institucional</label>
+              <input type="email" x-model="formContato.email" class="w-full border rounded px-3 py-1.5 text-sm">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Observações</label>
+            <textarea x-model="formContato.observacao" rows="2" class="w-full border rounded px-3 py-1.5 text-sm"></textarea>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-4 border-t">
+            <button type="button" @click="modalContatoAberto = false" class="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button type="submit" class="px-4 py-2 bg-sky-700 text-white rounded-lg text-xs font-bold hover:bg-sky-600 flex items-center shadow">
+              <span x-text="editandoContatoId ? 'Atualizar Contato' : 'Salvar Contato'"></span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: REGISTRAR / EDITAR VISITA IN LOCO -->
+    <div x-show="modalVisitaAberto" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak>
+      <div class="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto" @click.away="modalVisitaAberto = false">
+        <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+          <span class="p-1.5 bg-amber-100 text-amber-800 rounded-lg text-sm"><i class="fa-solid fa-location-dot"></i></span>
+          <span x-text="editandoCompromissoId ? 'Editar Visita in loco' : 'Registrar Visita / Fiscalização in loco'"></span>
+        </h3>
+
+        <form @submit.prevent="salvarVisitaInLoco" class="space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Identificação / Protocolo *</label>
+              <input type="text" x-model="formVisita.protocolo" required class="w-full border rounded px-3 py-1.5 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Setor da CAF *</label>
+              <select x-model="formVisita.setor" class="w-full border rounded px-3 py-1.5 text-sm bg-white font-semibold">
+                <template x-for="s in setoresCAF" :key="s"><option :value="s" x-text="s"></option></template>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Data da Inspeção *</label>
+              <input type="date" x-model="formVisita.data_apenas" required class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Horário Marcado</label>
+              <input type="time" x-model="formVisita.hora_apenas" class="w-full border rounded px-3 py-1.5 text-sm bg-white font-mono">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Unidade Inspecionada *</label>
+              <select x-model="formVisita.unidade_id" required class="w-full border rounded px-3 py-1.5 text-sm bg-white font-medium">
+                <option value="">Selecione a unidade de saúde...</option>
+                <template x-for="u in unidades" :key="u.id">
+                  <option :value="u.id" x-text="u.nome_fantasia"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Esfera de Gestão *</label>
+              <select x-model="formVisita.esfera_gestao" class="w-full border rounded px-3 py-1.5 text-sm bg-white font-medium">
+                <option value="Organização Social (OS)">Organização Social (OS)</option>
+                <option value="Administração Municipal (Direta)">Administração Municipal (Direta)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Auditor / Equipe Responsável *</label>
+              <input type="text" x-model="formVisita.responsavel_atribuido" required class="w-full border rounded px-3 py-1.5 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Gravidade / Risco Apurado</label>
+              <select x-model="formVisita.grau_risco" class="w-full border rounded px-3 py-1.5 text-sm">
+                <option>Médio</option>
+                <option>Alto</option>
+                <option>Crítico</option>
+                <option>Baixo</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="bg-sky-50/70 p-3 rounded-lg border border-sky-200">
+            <label class="block text-xs font-bold text-sky-950 mb-1 flex items-center gap-1.5">
+              <i class="fa-brands fa-google-drive text-sky-700"></i> Pasta de Fotos e Documentos (Drive) <span class="text-[10px] font-normal text-slate-500">(opcional)</span>
+            </label>
+            <input type="text" x-model="formVisita.link_drive" placeholder="Cole o link da pasta se houver, ou deixe em branco" class="w-full border rounded px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Relatório da Visita & Achados in loco *</label>
+            <textarea x-model="formVisita.descricao" required rows="4" class="w-full border rounded px-3 py-1.5 text-sm"></textarea>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-4 border-t">
+            <button type="button" @click="modalVisitaAberto = false" class="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button type="submit" :disabled="salvando" class="px-4 py-2 bg-amber-700 text-white rounded-lg text-xs font-bold hover:bg-amber-600 flex items-center shadow">
+              <span x-show="!salvando" x-text="editandoCompromissoId ? 'Atualizar Visita' : 'Salvar Visita in loco'"></span>
+              <span x-show="salvando"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Salvando...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: AGENDAR / EDITAR REUNIÃO -->
+    <div x-show="modalReuniaoAberto" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak>
+      <div class="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto" @click.away="modalReuniaoAberto = false">
+        <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+          <span class="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg text-sm"><i class="fa-solid fa-calendar-plus"></i></span>
+          <span x-text="editandoCompromissoId ? 'Editar Reunião / Alinhamento' : 'Agendar Reunião / Alinhamento'"></span>
+        </h3>
+
+        <form @submit.prevent="salvarReuniao" class="space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Título / Pauta da Reunião *</label>
+              <input type="text" x-model="formReuniao.protocolo" required class="w-full border rounded px-3 py-1.5 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Setor da CAF *</label>
+              <select x-model="formReuniao.setor" class="w-full border rounded px-3 py-1.5 text-sm bg-white font-semibold">
+                <template x-for="s in setoresCAF" :key="s"><option :value="s" x-text="s"></option></template>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Data da Reunião *</label>
+              <input type="date" x-model="formReuniao.data_apenas" required class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Horário Marcado</label>
+              <input type="time" x-model="formReuniao.hora_apenas" class="w-full border rounded px-3 py-1.5 text-sm bg-white font-mono">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Unidade Vinculada</label>
+              <select x-model="formReuniao.unidade_id" class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+                <option value="">Geral / Sede da CAF</option>
+                <template x-for="u in unidades" :key="u.id">
+                  <option :value="u.id" x-text="u.nome_fantasia"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Esfera Envolvida</label>
+              <select x-model="formReuniao.esfera_gestao" class="w-full border rounded px-3 py-1.5 text-sm bg-white font-medium">
+                <option value="Organização Social (OS)">Organização Social (OS)</option>
+                <option value="Administração Municipal (Direta)">Administração Municipal (Direta)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Responsável / Condutor</label>
+            <input type="text" x-model="formReuniao.responsavel_atribuido" class="w-full border rounded px-3 py-1.5 text-sm">
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Pauta Detalhada / Participantes</label>
+            <textarea x-model="formReuniao.descricao" rows="3" class="w-full border rounded px-3 py-1.5 text-sm"></textarea>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-4 border-t">
+            <button type="button" @click="modalReuniaoAberto = false" class="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button type="submit" :disabled="salvando" class="px-4 py-2 bg-emerald-700 text-white rounded-lg text-xs font-bold hover:bg-emerald-600 flex items-center shadow">
+              <span x-show="!salvando" x-text="editandoCompromissoId ? 'Atualizar Reunião' : 'Confirmar Agendamento'"></span>
+              <span x-show="salvando"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Salvando...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL DE CADASTRO OU EDIÇÃO DE DEMANDA -->
+    <div x-show="modalDemandaAberto" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak>
+      <div class="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto" @click.away="modalDemandaAberto = false">
+        <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+          <span class="p-1.5 bg-sky-100 text-sky-800 rounded-lg text-sm">
+            <i class="fa-solid" :class="editandoId ? 'fa-pen-to-square' : 'fa-plus'"></i>
+          </span>
+          <span x-text="editandoId ? 'Editar Demanda & Situação' : 'Cadastrar Demanda — SIS-CAF'"></span>
+        </h3>
+
+        <form @submit.prevent="salvarDemanda" class="space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Nº Protocolo / Ofício *</label>
+              <input type="text" x-model="formDemanda.protocolo" required class="w-full border rounded px-3 py-1.5 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-sky-950 mb-1">Setor Responsável (CAF) *</label>
+              <select x-model="formDemanda.setor" required class="w-full border rounded px-3 py-1.5 text-sm bg-white font-semibold">
+                <template x-for="s in setoresCAF" :key="s"><option :value="s" x-text="s"></option></template>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Origem do Pedido</label>
+              <select x-model="formDemanda.origem" class="w-full border rounded px-3 py-1.5 text-sm">
+                <option>Comissão de Fiscalização</option>
+                <option>Organização Social</option>
+                <option>Tribunal de Contas</option>
+                <option>Ministério Público</option>
+                <option>Ouvidoria do SUS</option>
+                <option>Secretaria de Saúde</option>
+                <option>Outros</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Unidade de Saúde Alvo</label>
+              <select x-model="formDemanda.unidade_id" class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+                <option value="">Geral / Sem unidade vinculada</option>
+                <template x-for="u in unidades" :key="u.id">
+                  <option :value="u.id" x-text="u.nome_fantasia"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Esfera de Gestão *</label>
+              <select x-model="formDemanda.esfera_gestao" class="w-full border rounded px-3 py-1.5 text-sm bg-white font-medium">
+                <option value="Organização Social (OS)">Organização Social (OS)</option>
+                <option value="Administração Municipal (Direta)">Administração Municipal (Direta)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-sky-950 mb-1">Situação da Demanda *</label>
+              <select x-model="formDemanda.status" class="w-full border rounded px-3 py-1.5 text-sm bg-white font-bold text-slate-800">
+                <option value="Triagem">Triagem</option>
+                <option value="Em andamento">Em andamento</option>
+                <option value="Concluída">Concluída</option>
+                <option value="Arquivada">Arquivada</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="bg-sky-50/70 p-3 rounded-lg border border-sky-200">
+            <label class="block text-xs font-bold text-sky-950 mb-1 flex items-center gap-1.5">
+              <i class="fa-brands fa-google-drive text-sky-700"></i> Pasta de Documentos e Fotos (Google Drive) <span class="text-[10px] font-normal text-slate-500">(opcional)</span>
+            </label>
+            <input type="text" x-model="formDemanda.link_drive" placeholder="Cole o link da pasta se houver, ou deixe em branco" class="w-full border rounded px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Descrição / Objeto da Fiscalização</label>
+            <textarea x-model="formDemanda.descricao" required rows="2" class="w-full border rounded px-3 py-1.5 text-sm"></textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Tipo de Fiscalização (Eixo)</label>
+              <select x-model="formDemanda.tipo_fiscalizacao" class="w-full border rounded px-3 py-1.5 text-sm">
+                <option>Assistencial</option>
+                <option>Financeira/Contábil</option>
+                <option>Recursos Humanos</option>
+                <option>Jurídica</option>
+                <option>Arquivística</option>
+                <option>Visita in loco</option>
+                <option>Outros</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Grau de Risco</label>
+              <select x-model="formDemanda.grau_risco" class="w-full border rounded px-3 py-1.5 text-sm">
+                <option>Crítico</option>
+                <option>Alto</option>
+                <option>Médio</option>
+                <option>Baixo</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 bg-slate-50 p-2.5 rounded-lg border">
+            <div>
+              <label class="block text-xs font-bold text-sky-950 mb-1">Auditor / Responsável *</label>
+              <input type="text" x-model="formDemanda.responsavel_atribuido" required class="w-full border rounded px-3 py-1.5 text-sm bg-white font-medium">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-sky-950 mb-1">Prazo Limite / Fatal *</label>
+              <input type="date" x-model="formDemanda.prazo_fatal" required class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-4 border-t">
+            <button type="button" @click="modalDemandaAberto = false" class="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button type="submit" :disabled="salvando" class="px-4 py-2 bg-sky-700 text-white rounded-lg text-xs font-bold hover:bg-sky-600 flex items-center shadow">
+              <span x-show="!salvando" x-text="editandoId ? 'Atualizar Dados' : 'Gravar Demanda'"></span>
+              <span x-show="salvando"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Salvando...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL DE DETALHES E DESPACHOS POR SETOR -->
+    <div x-show="modalVisualizar" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak @keydown.escape.window="modalVisualizar = false">
+      <div class="bg-white rounded-xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]" @click.away="modalVisualizar = false">
+        <div class="overflow-y-auto space-y-4 text-sm pr-1 flex-1" x-if="demandaVisualizada">
+          <div class="flex justify-between items-center border-b pb-3 mb-2">
+            <div class="flex items-center gap-3">
+              <span class="p-2.5 bg-sky-900 text-white rounded-lg shadow-sm"><i class="fa-solid fa-file-shield text-xl"></i></span>
+              <div>
+                <span class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Comissão de Avaliação e Fiscalização • <span x-text="obterSetor(demandaVisualizada)"></span></span>
+                <h3 class="text-lg font-bold text-slate-800" x-text="demandaVisualizada.protocolo"></h3>
+              </div>
+            </div>
+            <button @click="modalVisualizar = false" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition no-print">
+              <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <span class="text-xs text-slate-500 block mb-0.5 font-medium">Setor CAF</span>
+              <span class="font-bold text-xs" x-text="obterSetor(demandaVisualizada)"></span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <span class="text-xs text-slate-500 block mb-0.5 font-medium">Unidade Alvo</span>
+              <span class="font-semibold text-slate-800" x-text="demandaVisualizada.unidade_nome || 'Unidade Geral'"></span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <span class="text-xs text-slate-500 block mb-0.5 font-medium">Esfera de Gestão</span>
+              <span class="font-bold text-xs" x-text="obterEsferaGestao(demandaVisualizada)"></span>
+            </div>
+          </div>
+
+          <div x-show="obterLinkDrive(demandaVisualizada)" class="p-3 bg-sky-50 border border-sky-200 rounded-lg flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="fa-brands fa-google-drive text-sky-700 text-lg"></i>
+              <div>
+                <span class="text-xs font-bold text-sky-950 block">Pasta de Documentos e Fotos da Demanda</span>
+                <span class="text-[11px] text-slate-500">Evidências e laudos em nuvem</span>
+              </div>
+            </div>
+            <a :href="obterLinkDrive(demandaVisualizada)" target="_blank" class="px-3 py-1.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition">
+              Abrir Pasta no Drive <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+          </div>
+
+          <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+            <span class="text-xs text-slate-600 block mb-1 font-bold uppercase tracking-wider">Histórico do Processo & Despachos por Setor</span>
+            <div class="text-slate-800 bg-white p-3.5 rounded-lg border border-slate-200 text-xs sm:text-sm whitespace-pre-wrap leading-relaxed min-h-[90px] font-sans" x-text="demandaVisualizada.descricao || 'Sem descrição cadastrada.'"></div>
+          </div>
+
+          <div class="bg-sky-50 border border-sky-200 p-3.5 rounded-lg no-print">
+            <span class="text-xs font-bold text-sky-900 block mb-1.5"><i class="fa-solid fa-pen-to-square mr-1"></i> Inserir Despacho / Atualização de Setor</span>
+            <div class="flex flex-col gap-2">
+              <textarea x-model="novoDespachoTexto" rows="2" placeholder="Ex: Conferência realizada pelo setor..." class="w-full text-xs p-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"></textarea>
+              <div class="flex flex-wrap justify-between items-center gap-2">
+                <div class="flex items-center gap-2">
+                  <select x-model="novoDespachoSetor" class="text-xs border px-2.5 py-1.5 rounded-lg bg-white font-semibold">
+                    <template x-for="s in setoresCAF" :key="s"><option :value="s" x-text="s"></option></template>
+                  </select>
+                  <input type="text" x-model="novoDespachoAutor" placeholder="Autor do registro" class="text-xs border px-2.5 py-1.5 rounded-lg bg-white w-40 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+                <button @click="salvarDespacho()" :disabled="salvandoDespacho" class="bg-sky-800 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition shadow-sm">
+                  <span x-show="!salvandoDespacho"><i class="fa-solid fa-paper-plane mr-1"></i> Gravar Despacho</span>
+                  <span x-show="salvandoDespacho"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Gravando...</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-t pt-4 mt-3 flex justify-between items-center no-print">
+          <div class="flex gap-2">
+            <button type="button" @click="iniciarEdicao(demandaVisualizada); modalVisualizar = false;" class="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+              <i class="fa-solid fa-pen-to-square"></i> Editar
+            </button>
+            <button type="button" @click="imprimirFicha()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border border-slate-300">
+              <i class="fa-solid fa-print"></i> Imprimir Ficha
+            </button>
+          </div>
+          <button type="button" @click="modalVisualizar = false" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold transition">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: GERENCIAR UNIDADES -->
+    <div x-show="modalUnidadeAberto" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak>
+      <div class="bg-white rounded-xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col" @click.away="modalUnidadeAberto = false">
+        <div class="flex justify-between items-center border-b pb-3 mb-4">
+          <div class="flex items-center gap-2">
+            <span class="p-2 bg-sky-100 text-sky-800 rounded-lg"><i class="fa-solid fa-hospital"></i></span>
+            <h3 class="text-base font-bold text-slate-800">Gerenciar Unidades de Saúde</h3>
+          </div>
+          <button @click="modalUnidadeAberto = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex-1 pr-1 overflow-y-auto space-y-4">
+          <form @submit.prevent="salvarUnidade" class="space-y-3 bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+            <span class="text-xs font-bold text-sky-900 uppercase block mb-1">Cadastrar Nova Unidade</span>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Nome Fantasia da Unidade *</label>
+              <input type="text" x-model="formUnidade.nome_fantasia" required class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Tipo de Unidade</label>
+              <select x-model="formUnidade.tipo_unidade" class="w-full border rounded px-3 py-1.5 text-sm bg-white">
+                <option>Hospitalar</option>
+                <option>Urgência/Emergência (UPA/PA)</option>
+                <option>Atenção Básica (ESF/UBS)</option>
+                <option>Especializada (Policlínica/CEO)</option>
+                <option>Administrativa/Almoxarifado</option>
+              </select>
+            </div>
+            <div class="flex justify-end pt-2">
+              <button type="submit" :disabled="salvandoUnidade" class="px-4 py-1.5 bg-sky-800 text-white rounded-lg text-xs font-semibold hover:bg-sky-700 flex items-center shadow-sm">
+                <span x-show="!salvandoUnidade"><i class="fa-solid fa-plus mr-1"></i> Cadastrar Unidade</span>
+                <span x-show="salvandoUnidade"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Salvando...</span>
+              </button>
+            </div>
+          </form>
+
+          <div class="divide-y border rounded-lg overflow-hidden bg-white max-h-60 overflow-y-auto">
+            <template x-for="u in unidades" :key="u.id">
+              <div class="p-3 flex items-center justify-between hover:bg-slate-50 transition text-sm">
+                <div>
+                  <p class="font-bold text-slate-800 text-xs sm:text-sm" x-text="u.nome_fantasia"></p>
+                  <span class="text-xs text-slate-400" x-text="u.tipo_unidade"></span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" @click="abrirDossieUnidade(u)" class="px-2.5 py-1 text-sky-700 hover:text-white hover:bg-sky-700 border border-sky-300 rounded-md transition text-xs flex items-center gap-1 font-semibold">
+                    <i class="fa-solid fa-file-medical"></i> Raio-X
+                  </button>
+                  <button type="button" @click="excluirUnidade(u.id, u.nome_fantasia)" class="p-1 text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 rounded-md transition text-xs flex items-center">
+                    <i class="fa-regular fa-trash-can"></i>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="border-t pt-3 mt-4 flex justify-end">
+          <button type="button" @click="modalUnidadeAberto = false" class="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-medium transition">Fechar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL DO DOSSIÊ DA UNIDADE -->
+    <div x-show="modalDossieUnidade" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak>
+      <div class="bg-white rounded-xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]" @click.away="modalDossieUnidade = false">
+        <div class="overflow-y-auto space-y-4 text-sm pr-2 flex-1" x-if="unidadeDossie">
+          <div class="border-b-2 border-slate-800 pb-3 flex justify-between items-start">
+            <div>
+              <span class="text-[11px] text-sky-800 font-bold uppercase tracking-wider block">Dossiê Técnico — SIS-CAF</span>
+              <h2 class="text-xl font-bold text-slate-900" x-text="unidadeDossie.nome_fantasia"></h2>
+            </div>
+            <button @click="modalDossieUnidade = false" class="text-slate-400 hover:text-slate-600 p-1.5"><i class="fa-solid fa-xmark text-lg"></i></button>
+          </div>
+          <div class="divide-y border rounded-lg overflow-hidden text-xs">
+            <template x-for="d in demandasDaUnidadeDossie" :key="d.id">
+              <div class="p-3 bg-white flex justify-between items-start gap-3">
+                <div>
+                  <span class="font-bold text-slate-800" x-text="d.protocolo"></span>
+                  <span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold" :class="badgeSetorClasse(obterSetor(d))" x-text="obterSetor(d)"></span>
+                  <p class="text-slate-600 mt-1" x-text="limparTextoDescricao(d.descricao)"></p>
+                </div>
+                <span class="text-[11px] font-semibold" x-text="d.status"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div class="border-t pt-4 mt-3 flex justify-between items-center no-print">
+          <button type="button" @click="imprimirDossie()" class="px-4 py-2 bg-sky-900 text-white rounded-lg text-xs font-bold"><i class="fa-solid fa-print mr-1"></i> Imprimir Dossiê</button>
+          <button type="button" @click="modalDossieUnidade = false" class="px-5 py-2 bg-slate-800 text-white rounded-lg text-xs font-semibold">Fechar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: RELATÓRIO MENSAL EM TELA -->
+    <div x-show="modalRelatorioMensal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50" x-cloak>
+      <div class="bg-white rounded-xl max-w-4xl w-full p-8 shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]" @click.away="modalRelatorioMensal = false">
+        <div class="overflow-y-auto space-y-6 text-sm pr-2 flex-1">
+          <div class="border-b-2 border-slate-800 pb-4 text-center space-y-1">
+            <h2 class="text-lg font-bold tracking-tight text-slate-900 uppercase">Comissão de Avaliação e Fiscalização (SIS-CAF)</h2>
+            <p class="text-xs text-slate-500 font-mono" x-text="'Relatório Executivo &bull; ' + dataRelatorioExtenso"></p>
+          </div>
+
+          <div class="grid grid-cols-5 gap-2 text-center">
+            <template x-for="s in setoresCAF" :key="s">
+              <div class="p-3 bg-slate-50 border rounded-lg">
+                <span class="text-[10px] text-slate-500 uppercase font-bold block" x-text="s"></span>
+                <span class="text-lg font-bold text-slate-800" x-text="demandas.filter(d => obterSetor(d) === s).length"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="border-t pt-4 mt-3 flex justify-between items-center no-print">
+          <button type="button" @click="imprimirRelatorio()" class="px-4 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold"><i class="fa-solid fa-print mr-1"></i> Imprimir / Salvar PDF</button>
+          <button type="button" @click="modalRelatorioMensal = false" class="px-5 py-2 bg-slate-800 text-white rounded-lg text-xs font-semibold">Fechar</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOLHAS DE IMPRESSÃO -->
+  <div id="folha-impressao-demanda" class="area-papel-impressao" x-show="demandaVisualizada">
+    <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; text-align: center;">
+      <h1 style="font-size: 15px; font-weight: bold; text-transform: uppercase; margin: 0;">SIS-CAF &bull; Comissão de Avaliação e Fiscalização</h1>
+      <p style="font-size: 11px; font-family: monospace; color: #64748b; margin: 4px 0 0 0;">FICHA TÉCNICA DE FISCALIZAÇÃO</p>
+    </div>
+    <div style="font-size: 12px;" x-if="demandaVisualizada">
+      <p><strong>Protocolo:</strong> <span x-text="demandaVisualizada.protocolo"></span> | <strong>Setor:</strong> <span x-text="obterSetor(demandaVisualizada)"></span></p>
+      <p><strong>Unidade:</strong> <span x-text="demandaVisualizada.unidade_nome || 'Unidade Geral'"></span> | <strong>Gestão:</strong> <span x-text="obterEsferaGestao(demandaVisualizada)"></span></p>
+      <div style="border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; margin-top: 10px; white-space: pre-wrap;" x-text="demandaVisualizada.descricao"></div>
+    </div>
+  </div>
+
+  <div id="folha-impressao-dossie" class="area-papel-impressao" x-show="unidadeDossie">
+    <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; text-align: center;">
+      <h1 style="font-size: 15px; font-weight: bold; text-transform: uppercase; margin: 0;">SIS-CAF &bull; Dossiê da Unidade</h1>
+      <h2 style="font-size: 13px; margin: 4px 0 0 0;" x-text="unidadeDossie?.nome_fantasia"></h2>
+    </div>
+    <template x-for="d in demandasDaUnidadeDossie" :key="d.id">
+      <div style="border: 1px solid #cbd5e1; padding: 8px; margin-bottom: 8px; font-size: 11px;">
+        <strong x-text="d.protocolo + ' (' + obterSetor(d) + ')'"></strong>
+        <p style="margin: 4px 0 0 0; white-space: pre-wrap;" x-text="d.descricao"></p>
+      </div>
+    </template>
+  </div>
+
+  <div id="folha-impressao-relatorio" class="area-papel-impressao">
+    <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; text-align: center;">
+      <h1 style="font-size: 15px; font-weight: bold; text-transform: uppercase; margin: 0;">SIS-CAF &bull; Relatório Executivo por Setor</h1>
+      <p style="font-size: 11px;" x-text="dataRelatorioExtenso"></p>
+    </div>
+    <template x-for="s in setoresCAF" :key="s">
+      <p style="font-size: 12px;"><strong x-text="s + ':'"></strong> <span x-text="demandas.filter(d => obterSetor(d) === s).length + ' registro(s)'"></span></p>
+    </template>
+  </div>
+
+  <script>
+    const API_URL = 'https://siscaf-api.onrender.com';
+
+    function cafApp() {
+      return {
+        setoresCAF: [
+          'Assistencial',
+          'Contábil/Financeiro',
+          'Recursos Humanos',
+          'Jurídico',
+          'Arquivologia'
+        ],
+
+        abaAtiva: 'fiscalizacoes',
+        modalDemandaAberto: false,
+        modalReuniaoAberto: false,
+        modalVisitaAberto: false,
+        modalUnidadeAberto: false,
+        modalContatoAberto: false,
+        modalVisualizar: false,
+        modalRelatorioMensal: false,
+        modalDossieUnidade: false,
+
+        modoImpressao: '',
+        editandoId: null,
+        editandoCompromissoId: null,
+        editandoContatoId: null,
+        demandaVisualizada: null,
+        unidadeDossie: null,
+
+        carregando: false,
+        salvando: false,
+        salvandoUnidade: false,
+        salvandoDespacho: false,
+        conectandoRender: false,
+
+        filtroSetor: 'todos',
+        filtroRapido: 'todos',
+        busca: '',
+        buscaContatos: '',
+        filtroCategoriaContato: 'todos',
+
+        demandas: [],
+        unidades: [],
+        contatos: [],
+        toasts: [],
+
+        dataCalendarioAtual: new Date(),
+        diaSelecionadoIso: null,
+
+        chartGestaoInstancia: null,
+        chartEixosInstancia: null,
+        chartRiscoInstancia: null,
+
+        novoDespachoTexto: '',
+        novoDespachoSetor: 'Assistencial',
+        novoDespachoAutor: 'Comissão de Avaliação e Fiscalização',
+
+        formDemanda: {
+          protocolo: '',
+          setor: 'Assistencial',
+          origem: 'Comissão de Fiscalização',
+          unidade_id: '',
+          esfera_gestao: 'Organização Social (OS)',
+          tipo_fiscalizacao: 'Assistencial',
+          grau_risco: 'Médio',
+          prazo_fatal: '',
+          descricao: '',
+          responsavel_atribuido: 'Comissão de Auditoria',
+          status: 'Triagem',
+          link_drive: ''
+        },
+
+        formVisita: {
+          protocolo: '',
+          setor: 'Assistencial',
+          origem: 'Fiscalização in loco',
+          unidade_id: '',
+          esfera_gestao: 'Organização Social (OS)',
+          tipo_fiscalizacao: 'Visita in loco',
+          grau_risco: 'Médio',
+          data_apenas: '',
+          hora_apenas: '09:00',
+          prazo_fatal: '',
+          descricao: '',
+          responsavel_atribuido: '',
+          link_drive: ''
+        },
+
+        formReuniao: {
+          protocolo: '',
+          setor: 'Assistencial',
+          origem: 'Reunião de Alinhamento',
+          unidade_id: '',
+          esfera_gestao: 'Organização Social (OS)',
+          tipo_fiscalizacao: 'Reunião',
+          grau_risco: 'Baixo',
+          data_apenas: '',
+          hora_apenas: '14:00',
+          prazo_fatal: '',
+          descricao: '',
+          responsavel_atribuido: ''
+        },
+
+        formUnidade: {
+          nome_fantasia: '',
+          tipo_unidade: 'Hospitalar'
+        },
+
+        formContato: {
+          nome: '',
+          cargo: '',
+          orgao_unidade: '',
+          orgao_setor: '',
+          categoria: 'Organização Social',
+          telefone: '',
+          email: '',
+          observacao: ''
+        },
+
+        mostrarToast(mensagem, tipo = 'sucesso') {
+          const id = Date.now();
+          this.toasts.push({ id, mensagem, tipo });
+          setTimeout(() => {
+            this.toasts = this.toasts.filter(t => t.id !== id);
+          }, 4000);
+        },
+
+        async iniciarApp() {
+          this.carregando = true;
+          const timeoutId = setTimeout(() => {
+            if (this.carregando) this.conectandoRender = true;
+          }, 2500);
+
+          try {
+            await Promise.all([
+              this.carregarDemandas(),
+              this.carregarUnidades(),
+              this.carregarContatos()
+            ]);
+          } finally {
+            clearTimeout(timeoutId);
+            this.conectandoRender = false;
+            this.carregando = false;
+          }
+        },
+
+        mudarAba(aba) {
+          this.abaAtiva = aba;
+          if (aba === 'indicadores') {
+            this.$nextTick(() => this.atualizarGraficos());
+          }
+        },
+
+        async carregarDemandas() {
+          try {
+            const res = await fetch(`${API_URL}/api/demandas`);
+            if (!res.ok) throw new Error();
+            this.demandas = await res.json();
+            if (this.abaAtiva === 'indicadores') this.atualizarGraficos();
+          } catch (err) {
+            this.mostrarToast('Erro ao sincronizar dados com o servidor.', 'erro');
+          }
+        },
+
+        async carregarUnidades() {
+          try {
+            const res = await fetch(`${API_URL}/api/unidades`);
+            if (res.ok) this.unidades = await res.json();
+          } catch (e) {
+            console.error(e);
+          }
+        },
+
+        async carregarContatos() {
+          try {
+            const res = await fetch(`${API_URL}/api/contatos`);
+            if (!res.ok) throw new Error('Status ' + res.status);
+            const dados = await res.json();
+            if (Array.isArray(dados)) {
+              this.contatos = dados;
+              localStorage.setItem('siscaf_contatos', JSON.stringify(dados));
+              return;
+            }
+          } catch (e) {
+            const salvos = localStorage.getItem('siscaf_contatos');
+            if (salvos) {
+              try { this.contatos = JSON.parse(salvos); } catch (err) { this.contatos = []; }
+            }
+          }
+        },
+
+        obterSetor(d) {
+          if (!d) return 'Assistencial';
+          if (d.setor && this.setoresCAF.includes(d.setor)) return d.setor;
+          if (d.descricao && d.descricao.includes('[SETOR:')) {
+            const match = d.descricao.match(/\[SETOR:\s*([^\]]+)\]/);
+            if (match && match[1]) return match[1].trim();
+          }
+          return 'Assistencial';
+        },
+
+        badgeSetorClasse(setor) {
+          const mapa = {
+            'Assistencial': 'bg-sky-100 text-sky-800 border-sky-200',
+            'Contábil/Financeiro': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+            'Recursos Humanos': 'bg-amber-100 text-amber-800 border-amber-200',
+            'Jurídico': 'bg-purple-100 text-purple-800 border-purple-200',
+            'Arquivologia': 'bg-slate-200 text-slate-800 border-slate-300'
+          };
+          return mapa[setor] || 'bg-slate-100 text-slate-700 border-slate-200';
+        },
+
+        filtrarPorSetor(setor) {
+          this.filtroSetor = setor;
+          this.abaAtiva = 'fiscalizacoes';
+        },
+
+        get fluxoPorSetor() {
+          const mapa = {};
+          this.setoresCAF.forEach(s => {
+            mapa[s] = { total: 0, emAndamento: 0, criticos: 0, concluidos: 0, processos: [] };
+          });
+          this.demandasApenasFiscalizacao.forEach(d => {
+            const s = this.obterSetor(d);
+            if (!mapa[s]) mapa[s] = { total: 0, emAndamento: 0, criticos: 0, concluidos: 0, processos: [] };
+            mapa[s].total++;
+            if (d.status === 'Concluída' || d.status === 'Arquivada') mapa[s].concluidos++;
+            else mapa[s].emAndamento++;
+            if ((d.grau_risco === 'Crítico' || d.grau_risco === 'Alto') && d.status !== 'Arquivada') mapa[s].criticos++;
+            mapa[s].processos.push(d);
+          });
+          return mapa;
+        },
+
+        abrirModalNovoContato() {
+          this.editandoContatoId = null;
+          this.formContato = { nome: '', cargo: '', orgao_unidade: '', orgao_setor: '', categoria: 'Organização Social', telefone: '', email: '', observacao: '' };
+          this.modalContatoAberto = true;
+        },
+
+        iniciarEdicaoContato(c) {
+          this.editandoContatoId = c.id;
+          const orgaoTexto = c.orgao_unidade || c.orgao_setor || '';
+          this.formContato = { nome: c.nome, cargo: c.cargo, orgao_unidade: orgaoTexto, orgao_setor: orgaoTexto, categoria: c.categoria || 'Organização Social', telefone: c.telefone || '', email: c.email || '', observacao: c.observacao || '' };
+          this.modalContatoAberto = true;
+        },
+
+        async salvarContato() {
+          this.salvando = true;
+          try {
+            const url = this.editandoContatoId ? `${API_URL}/api/contatos/${this.editandoContatoId}` : `${API_URL}/api/contatos`;
+            const metodo = this.editandoContatoId ? 'PUT' : 'POST';
+            const valorOrgao = (this.formContato.orgao_unidade || this.formContato.orgao_setor || 'Não informado').trim();
+            const res = await fetch(url, {
+              method: metodo,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...this.formContato, orgao_unidade: valorOrgao, orgao_setor: valorOrgao })
+            });
+            if (!res.ok) throw new Error('Falha ao salvar contato.');
+            await this.carregarContatos();
+            this.mostrarToast(this.editandoContatoId ? 'Contato atualizado!' : 'Contato salvo!');
+            this.modalContatoAberto = false;
+          } catch (err) {
+            this.mostrarToast(err.message, 'erro');
+          } finally {
+            this.salvando = false;
+          }
+        },
+
+        async excluirContato(id, nome) {
+          if (!confirm(`Deseja realmente excluir o contato "${nome}"?`)) return;
+          try {
+            const res = await fetch(`${API_URL}/api/contatos/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Erro ao excluir contato.');
+            await this.carregarContatos();
+            this.mostrarToast(`Contato "${nome}" excluído!`);
+          } catch (err) {
+            this.mostrarToast(err.message, 'erro');
+          }
+        },
+
+        get contatosFiltrados() {
+          let lista = this.contatos;
+          if (this.filtroCategoriaContato !== 'todos') lista = lista.filter(c => c.categoria === this.filtroCategoriaContato);
+          if (!this.buscaContatos) return lista;
+          const termo = this.buscaContatos.toLowerCase();
+          return lista.filter(c => {
+            const orgaoTexto = (c.orgao_unidade || c.orgao_setor || '').toLowerCase();
+            return (c.nome && c.nome.toLowerCase().includes(termo)) ||
+              (c.cargo && c.cargo.toLowerCase().includes(termo)) ||
+              orgaoTexto.includes(termo);
+          });
+        },
+
+        obterLinkDrive(d) {
+          if (!d) return null;
+          if (d.link_drive && typeof d.link_drive === 'string' && d.link_drive.trim() !== '') return d.link_drive.trim();
+          if (d.descricao && d.descricao.includes('[DRIVE:')) {
+            const match = d.descricao.match(/\[DRIVE:\s*(https?:\/\/[^\]]+)\]/);
+            if (match && match[1]) return match[1].trim();
+          }
+          return null;
+        },
+
+        calcularPascoa(ano) {
+          const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100, d = Math.floor(b / 4), e = b % 4;
+          const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+          const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+          const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+          const mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+          return new Date(ano, mes - 1, dia);
+        },
+
+        obterFeriadosDoAno(ano) {
+          const feriados = {};
+          const add = (iso, nome, tipo, descricao) => { feriados[iso] = { nome, tipo, descricao }; };
+          add(`${ano}-01-01`, 'Confraternização Universal', 'Feriado Nacional', 'Ano Novo');
+          add(`${ano}-04-21`, 'Tiradentes', 'Feriado Nacional', 'Homenagem a Tiradentes');
+          add(`${ano}-04-23`, 'Dia de São Jorge', 'Feriado Estadual (RJ)', 'Lei Estadual nº 5.198/2008');
+          add(`${ano}-05-01`, 'Dia do Trabalhador', 'Feriado Nacional', 'Dia Mundial do Trabalho');
+          add(`${ano}-05-08`, 'Emancipação de Saquarema', 'Feriado Municipal (Saquarema)', 'Aniversário da Cidade');
+          add(`${ano}-09-07`, 'Independência do Brasil', 'Feriado Nacional', 'Dia da Pátria');
+          add(`${ano}-09-08`, 'N. Sra. de Nazareth', 'Feriado Municipal (Saquarema)', 'Padroeira do Município');
+          add(`${ano}-10-12`, 'N. Sra. Aparecida', 'Feriado Nacional', 'Padroeira do Brasil');
+          add(`${ano}-11-02`, 'Finados', 'Feriado Nacional', 'Dia de Finados');
+          add(`${ano}-11-15`, 'Proclamação da República', 'Feriado Nacional', 'Proclamação da República');
+          add(`${ano}-11-20`, 'Dia da Consciência Negra', 'Feriado Nacional', 'Zumbi dos Palmares');
+          add(`${ano}-12-25`, 'Natal', 'Feriado Nacional', 'Celebração de Natal');
+          const pascoa = this.calcularPascoa(ano);
+          const carnaval = new Date(pascoa); carnaval.setDate(pascoa.getDate() - 47);
+          add(`${ano}-${String(carnaval.getMonth()+1).padStart(2,'0')}-${String(carnaval.getDate()).padStart(2,'0')}`, 'Carnaval', 'Feriado Estadual (RJ)', 'Carnaval');
+          const sexta = new Date(pascoa); sexta.setDate(pascoa.getDate() - 2);
+          add(`${ano}-${String(sexta.getMonth()+1).padStart(2,'0')}-${String(sexta.getDate()).padStart(2,'0')}`, 'Sexta-feira Santa', 'Feriado Nacional', 'Paixão de Cristo');
+          const corpus = new Date(pascoa); corpus.setDate(pascoa.getDate() + 60);
+          add(`${ano}-${String(corpus.getMonth()+1).padStart(2,'0')}-${String(corpus.getDate()).padStart(2,'0')}`, 'Corpus Christi', 'Ponto Facultativo', 'Corpus Christi');
+          return feriados;
+        },
+
+        obterFeriadoDoDia(dataIso) {
+          if (!dataIso) return null;
+          return this.obterFeriadosDoAno(Number(dataIso.substring(0, 4)))[dataIso] || null;
+        },
+
+        get feriadoDoDiaSelecionado() {
+          return this.diaSelecionadoIso ? this.obterFeriadoDoDia(this.diaSelecionadoIso) : null;
+        },
+
+        montarDataIso(dataStr, horaStr) {
+          if (!dataStr) return null;
+          const hora = (horaStr && horaStr.trim() !== '') ? horaStr.trim() : '09:00';
+          return `${dataStr}T${hora}:00`;
+        },
+
+        extrairHora(dataIso, descricao = '') {
+          if (dataIso && dataIso.includes('T')) {
+            const h = dataIso.split('T')[1].substring(0, 5);
+            if (h && h !== '00:00') return h;
+          }
+          if (descricao && descricao.includes('[HORA:')) {
+            const match = descricao.match(/\[HORA:\s*([0-9]{2}:[0-9]{2})\]/);
+            if (match && match[1]) return match[1];
+          }
+          return '';
+        },
+
+        formatarDataComHora(dataIso, descricao = '') {
+          if (!dataIso) return '-';
+          const [ano, mes, dia] = dataIso.substring(0, 10).split('-');
+          const hora = this.extrairHora(dataIso, descricao);
+          return `${dia}/${mes}/${ano}${hora ? ` às ${hora}h` : ''}`;
+        },
+
+        limparTextoDescricao(desc) {
+          if (!desc) return 'Sem descrição detalhada.';
+          return desc
+            .replace(/\[SETOR:\s*[^\]]+\]\s*/g, '')
+            .replace(/\[HORA:\s*[0-9]{2}:[0-9]{2}\]\s*/g, '')
+            .replace(/\[GESTÃO:\s*[^\]]+\]\s*/g, '')
+            .replace(/\[PAUTA:\s*[^\]]+\]\s*/g, '')
+            .replace(/\[DRIVE:\s*[^\]]+\]\s*/g, '')
+            .trim() || 'Sem descrição detalhada.';
+        },
+
+        async avancarStatus(d) {
+          const proximoStatus = d.status === 'Triagem' ? 'Em andamento' : (d.status === 'Em andamento' ? 'Concluída' : 'Triagem');
+          try {
+            const res = await fetch(`${API_URL}/api/demandas/${d.id}/status`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: proximoStatus })
+            });
+            if (!res.ok) throw new Error();
+            d.status = proximoStatus;
+            this.mostrarToast(`Situação alterada para: ${proximoStatus}`);
+            if (this.abaAtiva === 'indicadores') this.atualizarGraficos();
+          } catch (err) {
+            this.mostrarToast('Não foi possível atualizar o status.', 'erro');
+          }
+        },
+
+        async alternarArquivamento(d) {
+          const novoStatus = d.status === 'Arquivada' ? 'Em andamento' : 'Arquivada';
+          try {
+            const res = await fetch(`${API_URL}/api/demandas/${d.id}/status`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: novoStatus })
+            });
+            if (!res.ok) throw new Error('Falha ao alterar status.');
+            d.status = novoStatus;
+            this.mostrarToast(`Processo "${d.protocolo}" atualizado para ${novoStatus}!`);
+            if (this.abaAtiva === 'indicadores') this.atualizarGraficos();
+          } catch (err) {
+            this.mostrarToast(err.message, 'erro');
+          }
+        },
+
+        get demandasArquivadas() {
+          return this.demandasApenasFiscalizacao.filter(d => d.status === 'Arquivada');
+        },
+
+        get compromissosCalendario() {
+          return this.demandas.filter(d => (d.tipo_fiscalizacao === 'Reunião' || d.tipo_fiscalizacao === 'Visita in loco') && d.status !== 'Arquivada');
+        },
+
+        obterCompromissosDoDia(dataIso) {
+          if (!dataIso) return [];
+          return this.compromissosCalendario.filter(r => r.prazo_fatal && r.prazo_fatal.substring(0, 10) === dataIso);
+        },
+
+        get compromissosFiltradosLateral() {
+          return this.diaSelecionadoIso ? this.obterCompromissosDoDia(this.diaSelecionadoIso) : this.compromissosCalendario.slice(0, 8);
+        },
+
+        abrirModalReuniao(dataPrevia = null) {
+          this.editandoCompromissoId = null;
+          this.formReuniao = {
+            protocolo: '',
+            setor: this.filtroSetor !== 'todos' ? this.filtroSetor : 'Assistencial',
+            origem: 'Reunião de Alinhamento',
+            unidade_id: '',
+            esfera_gestao: 'Organização Social (OS)',
+            tipo_fiscalizacao: 'Reunião',
+            grau_risco: 'Baixo',
+            data_apenas: dataPrevia || new Date().toISOString().substring(0, 10),
+            hora_apenas: '14:00',
+            prazo_fatal: '',
+            descricao: '',
+            responsavel_atribuido: ''
+          };
+          this.modalReuniaoAberto = true;
+        },
+
+        abrirModalNovaVisita(unidadeId = '', dataPrevia = null) {
+          this.editandoCompromissoId = null;
+          this.formVisita = {
+            protocolo: 'VISTORIA-' + new Date().getFullYear() + '/' + String(Math.floor(Math.random() * 900) + 100),
+            setor: this.filtroSetor !== 'todos' ? this.filtroSetor : 'Assistencial',
+            origem: 'Fiscalização in loco',
+            unidade_id: unidadeId || '',
+            esfera_gestao: 'Organização Social (OS)',
+            tipo_fiscalizacao: 'Visita in loco',
+            grau_risco: 'Médio',
+            data_apenas: dataPrevia || new Date().toISOString().substring(0, 10),
+            hora_apenas: '09:30',
+            prazo_fatal: '',
+            descricao: '',
+            responsavel_atribuido: '',
+            link_drive: ''
+          };
+          this.modalVisitaAberto = true;
+        },
+
+        editarCompromisso(c) {
+          this.editandoCompromissoId = c.id;
+          const dataParte = c.prazo_fatal ? c.prazo_fatal.substring(0, 10) : new Date().toISOString().substring(0, 10);
+          const horaParte = this.extrairHora(c.prazo_fatal, c.descricao) || '09:00';
+          const descLimpa = this.limparTextoDescricao(c.descricao);
+          const base = {
+            protocolo: c.protocolo,
+            setor: this.obterSetor(c),
+            origem: c.origem,
+            unidade_id: c.unidade_id || '',
+            esfera_gestao: this.obterEsferaGestao(c),
+            tipo_fiscalizacao: c.tipo_fiscalizacao,
+            grau_risco: c.grau_risco || 'Médio',
+            data_apenas: dataParte,
+            hora_apenas: horaParte,
+            descricao: descLimpa,
+            responsavel_atribuido: c.responsavel_atribuido || '',
+            link_drive: this.obterLinkDrive(c) || ''
+          };
+          if (c.tipo_fiscalizacao === 'Visita in loco') {
+            this.formVisita = base;
+            this.modalVisitaAberto = true;
+          } else {
+            this.formReuniao = base;
+            this.modalReuniaoAberto = true;
+          }
+        },
+
+        async salvarReuniao() {
+          this.salvando = true;
+          try {
+            const dataFinalIso = this.montarDataIso(this.formReuniao.data_apenas, this.formReuniao.hora_apenas);
+            const horaDefinida = this.formReuniao.hora_apenas || '14:00';
+            let descricaoFinal = `[SETOR: ${this.formReuniao.setor}]\n[HORA: ${horaDefinida}]\n` + (this.formReuniao.descricao || '');
+            const payload = {
+              protocolo: (this.formReuniao.protocolo || '').trim().slice(0, 30),
+              setor: this.formReuniao.setor,
+              origem: this.formReuniao.origem,
+              unidade_id: this.formReuniao.unidade_id || null,
+              esfera_gestao: this.formReuniao.esfera_gestao,
+              tipo_fiscalizacao: 'Reunião',
+              grau_risco: this.formReuniao.grau_risco,
+              prazo_fatal: dataFinalIso,
+              descricao: descricaoFinal,
+              responsavel_atribuido: this.formReuniao.responsavel_atribuido
+            };
+            const url = this.editandoCompromissoId ? `${API_URL}/api/demandas/${this.editandoCompromissoId}` : `${API_URL}/api/demandas`;
+            const res = await fetch(url, {
+              method: this.editandoCompromissoId ? 'PUT' : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('Falha ao salvar reunião.');
+            this.modalReuniaoAberto = false;
+            this.editandoCompromissoId = null;
+            await this.carregarDemandas();
+            this.mostrarToast('Reunião salva com sucesso!');
+          } catch (err) {
+            this.mostrarToast(err.message, 'erro');
+          } finally {
+            this.salvando = false;
+          }
+        },
+
+        async salvarVisitaInLoco() {
+          this.salvando = true;
+          try {
+            const dataFinalIso = this.montarDataIso(this.formVisita.data_apenas, this.formVisita.hora_apenas);
+            const horaDefinida = this.formVisita.hora_apenas || '09:00';
+            let descricaoFinal = `[SETOR: ${this.formVisita.setor}]\n[HORA: ${horaDefinida}]\n` + (this.formVisita.descricao || '');
+            if (this.formVisita.link_drive && this.formVisita.link_drive.trim() !== '') {
+              descricaoFinal = `[DRIVE: ${this.formVisita.link_drive.trim()}]\n` + descricaoFinal;
+            }
+            const payload = {
+              protocolo: (this.formVisita.protocolo || '').trim().slice(0, 30),
+              setor: this.formVisita.setor,
+              origem: this.formVisita.origem,
+              unidade_id: this.formVisita.unidade_id || null,
+              esfera_gestao: this.formVisita.esfera_gestao,
+              tipo_fiscalizacao: 'Visita in loco',
+              grau_risco: this.formVisita.grau_risco,
+              prazo_fatal: dataFinalIso,
+              descricao: descricaoFinal,
+              responsavel_atribuido: this.formVisita.responsavel_atribuido,
+              status: 'Concluída'
+            };
+            const url = this.editandoCompromissoId ? `${API_URL}/api/demandas/${this.editandoCompromissoId}` : `${API_URL}/api/demandas`;
+            const res = await fetch(url, {
+              method: this.editandoCompromissoId ? 'PUT' : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('Falha ao salvar visita.');
+            this.modalVisitaAberto = false;
+            this.editandoCompromissoId = null;
+            await this.carregarDemandas();
+            this.mostrarToast('Visita in loco salva com sucesso!');
+          } catch (err) {
+            this.mostrarToast(err.message, 'erro');
+          } finally {
+            this.salvando = false;
+          }
+        },
+
+        imprimirFicha() {
+          if (!this.demandaVisualizada) return;
+          this.modoImpressao = 'demanda';
+          setTimeout(() => { window.print(); this.modoImpressao = ''; }, 100);
+        },
+
+        imprimirDossie() {
+          if (!this.unidadeDossie) return;
+          this.modoImpressao = 'dossie';
+          setTimeout(() => { window.print(); this.modoImpressao = ''; }, 100);
+        },
+
+        imprimirRelatorio() {
+          this.modoImpressao = 'relatorio';
+          setTimeout(() => { window.print(); this.modoImpressao = ''; }, 100);
+        },
+
+        get todasVisitasInLoco() {
+          return this.demandas.filter(d => d.tipo_fiscalizacao === 'Visita in loco');
+        },
+
+        abrirDossieUnidade(u) {
+          this.unidadeDossie = u;
+          this.modalDossieUnidade = true;
+        },
+
+        get demandasDaUnidadeDossie() {
+          if (!this.unidadeDossie) return [];
+          return this.demandas.filter(d => d.unidade_id === this.unidadeDossie.id);
+        },
+
+        abrirNovoModal() {
+          this.editandoId = null;
+          this.formDemanda = {
+            protocolo: '',
+            setor: this.filtroSetor !== 'todos' ? this.filtroSetor : 'Assistencial',
+            origem: 'Comissão de Fiscalização',
+            unidade_id: '',
+            esfera_gestao: 'Organização Social (OS)',
+            tipo_fiscalizacao: 'Assistencial',
+            grau_risco: 'Médio',
+            prazo_fatal: '',
+            descricao: '',
+            responsavel_atribuido: 'Comissão de Auditoria',
+            status: 'Triagem',
+            link_drive: ''
+          };
+          this.modalDemandaAberto = true;
+        },
+
+        iniciarEdicao(demanda) {
+          this.editandoId = demanda.id;
+          this.formDemanda = {
+            protocolo: demanda.protocolo,
+            setor: this.obterSetor(demanda),
+            origem: demanda.origem || 'Comissão de Fiscalização',
+            unidade_id: demanda.unidade_id || '',
+            esfera_gestao: this.obterEsferaGestao(demanda),
+            tipo_fiscalizacao: demanda.tipo_fiscalizacao || 'Assistencial',
+            grau_risco: demanda.grau_risco || 'Médio',
+            prazo_fatal: demanda.prazo_fatal ? demanda.prazo_fatal.substring(0, 10) : '',
+            descricao: this.limparTextoDescricao(demanda.descricao),
+            responsavel_atribuido: demanda.responsavel_atribuido || 'Comissão de Auditoria',
+            status: demanda.status || 'Triagem',
+            link_drive: this.obterLinkDrive(demanda) || ''
+          };
+          this.modalDemandaAberto = true;
+        },
+
+        async salvarDemanda() {
+          this.salvando = true;
+          try {
+            let descricaoFinal = `[SETOR: ${this.formDemanda.setor}]\n` + (this.formDemanda.descricao || '');
+            if (this.formDemanda.link_drive && this.formDemanda.link_drive.trim() !== '') {
+              descricaoFinal = `[DRIVE: ${this.formDemanda.link_drive.trim()}]\n` + descricaoFinal;
+            }
+            const payload = {
+              protocolo: this.formDemanda.protocolo,
+              setor: this.formDemanda.setor,
+              origem: this.formDemanda.origem,
+              unidade_id: this.formDemanda.unidade_id || null,
+              esfera_gestao: this.formDemanda.esfera_gestao,
+              tipo_fiscalizacao: this.formDemanda.tipo_fiscalizacao,
+              grau_risco: this.formDemanda.grau_risco,
+              prazo_fatal: this.formDemanda.prazo_fatal || null,
+              descricao: descricaoFinal,
+              responsavel_atribuido: this.formDemanda.responsavel_atribuido,
+              status: this.formDemanda.status || 'Triagem'
+            };
+            const url = this.editandoId ? `${API_URL}/api/demandas/${this.editandoId}` : `${API_URL}/api/demandas`;
+            const res = await fetch(url, {
+              method: this.editandoId ? 'PUT' : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('Não foi possível salvar no servidor.');
+            this.modalDemandaAberto = false;
+            await this.carregarDemandas();
+            this.mostrarToast(this.editandoId ? 'Demanda atualizada!' : 'Demanda cadastrada!');
+          } catch (err) {
+            this.mostrarToast(err.message, 'erro');
+          } finally {
+            this.salvando = false;
+          }
+        },
+
+        get demandasApenasFiscalizacao() {
+          return this.demandas.filter(d => d.tipo_fiscalizacao !== 'Reunião');
+        },
+
+        get demandasFiltradas() {
+          let lista = this.demandasApenasFiscalizacao;
+
+          if (this.filtroSetor !== 'todos') {
+            lista = lista.filter(d => this.obterSetor(d) === this.filtroSetor);
+          }
+
+          if (this.filtroRapido === 'arquivadas') {
+            lista = lista.filter(d => d.status === 'Arquivada');
+          } else {
+            lista = lista.filter(d => d.status !== 'Arquivada');
+            if (this.filtroRapido === 'visitas') lista = lista.filter(d => d.tipo_fiscalizacao === 'Visita in loco');
+            else if (this.filtroRapido === 'vencidos') lista = lista.filter(d => this.estaVencido(d.prazo_fatal, d.status));
+            else if (this.filtroRapido === 'andamento') lista = lista.filter(d => d.status === 'Em andamento' || d.status === 'Triagem');
+            else if (this.filtroRapido === 'concluidas') lista = lista.filter(d => d.status === 'Concluída');
+            else if (this.filtroRapido === 'os') lista = lista.filter(d => this.obterEsferaGestao(d) === 'Organização Social (OS)');
+            else if (this.filtroRapido === 'municipio') lista = lista.filter(d => this.obterEsferaGestao(d) === 'Administração Municipal (Direta)');
+          }
+
+          if (!this.busca) return lista;
+          const termo = this.busca.toLowerCase();
+          return lista.filter(d =>
+            (d.protocolo && d.protocolo.toLowerCase().includes(termo)) ||
+            (this.obterSetor(d).toLowerCase().includes(termo)) ||
+            (d.unidade_nome && d.unidade_nome.toLowerCase().includes(termo)) ||
+            (d.responsavel_atribuido && d.responsavel_atribuido.toLowerCase().includes(termo))
+          );
+        },
+
+        get alertasPrioritarios() {
+          return this.demandasApenasFiscalizacao.filter(d => {
+            if (d.status === 'Concluída' || d.status === 'Arquivada') return false;
+            const riscoAlto = d.grau_risco === 'Crítico' || d.grau_risco === 'Alto';
+            const orgaoExterno = d.origem === 'Ministério Público' || d.origem === 'Tribunal de Contas';
+            const vencidoOuQuase = this.diasAtePrazo(d.prazo_fatal) <= 3;
+            return (riscoAlto && vencidoOuQuase) || (orgaoExterno && vencidoOuQuase) || d.grau_risco === 'Crítico';
+          }).slice(0, 6);
+        },
+
+        diasAtePrazo(dataIso) {
+          if (!dataIso) return 999;
+          const hoje = new Date(); hoje.setHours(0,0,0,0);
+          const [ano, mes, dia] = dataIso.substring(0, 10).split('-');
+          const prazo = new Date(Number(ano), Number(mes)-1, Number(dia)); prazo.setHours(0,0,0,0);
+          return Math.round((prazo - hoje) / (1000 * 60 * 60 * 24));
+        },
+
+        atualizarGraficos() {
+          const dados = this.demandasApenasFiscalizacao.filter(d => d.status !== 'Arquivada');
+
+          const ctxGestao = document.getElementById('chartGestao');
+          if (ctxGestao) {
+            if (this.chartGestaoInstancia) this.chartGestaoInstancia.destroy();
+            this.chartGestaoInstancia = new Chart(ctxGestao, {
+              type: 'doughnut',
+              data: {
+                labels: this.setoresCAF,
+                datasets: [{
+                  data: this.setoresCAF.map(s => dados.filter(d => this.obterSetor(d) === s).length),
+                  backgroundColor: ['#0284c7', '#16a34a', '#d97706', '#7e22ce', '#475569']
+                }]
+              },
+              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }
+            });
+          }
+
+          const contagemEixos = {};
+          dados.forEach(d => { const eixo = d.tipo_fiscalizacao || 'Outros'; contagemEixos[eixo] = (contagemEixos[eixo] || 0) + 1; });
+          const ctxEixos = document.getElementById('chartEixos');
+          if (ctxEixos) {
+            if (this.chartEixosInstancia) this.chartEixosInstancia.destroy();
+            this.chartEixosInstancia = new Chart(ctxEixos, {
+              type: 'bar',
+              data: { labels: Object.keys(contagemEixos), datasets: [{ label: 'Demandas', data: Object.values(contagemEixos), backgroundColor: '#0ea5e9' }] },
+              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+            });
+          }
+
+          const ctxRisco = document.getElementById('chartRisco');
+          if (ctxRisco) {
+            if (this.chartRiscoInstancia) this.chartRiscoInstancia.destroy();
+            this.chartRiscoInstancia = new Chart(ctxRisco, {
+              type: 'pie',
+              data: {
+                labels: ['Crítico', 'Alto', 'Médio', 'Baixo'],
+                datasets: [{
+                  data: ['Crítico', 'Alto', 'Médio', 'Baixo'].map(r => dados.filter(d => d.grau_risco === r).length),
+                  backgroundColor: ['#e11d48', '#f59e0b', '#3b82f6', '#94a3b8']
+                }]
+              },
+              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+          }
+        },
+
+        abrirRelatorioMensal() { this.modalRelatorioMensal = true; },
+        get dataRelatorioExtenso() { return new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase(); },
+        get nomeMesAtual() { return this.dataCalendarioAtual.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); },
+        mudarMes(delta) { const d = new Date(this.dataCalendarioAtual); d.setMonth(d.getMonth() + delta); this.dataCalendarioAtual = d; },
+        irParaMesAtual() { this.dataCalendarioAtual = new Date(); this.diaSelecionadoIso = null; },
+        selecionarDiaCalendario(dataIso) { this.diaSelecionadoIso = dataIso; },
+
+        get diasCalendario() {
+          const ano = this.dataCalendarioAtual.getFullYear();
+          const mes = this.dataCalendarioAtual.getMonth();
+          const primeiroDia = new Date(ano, mes, 1);
+          const ultimoDia = new Date(ano, mes + 1, 0);
+          const dias = [];
+          const diaSemanaInicio = primeiroDia.getDay();
+          const ultimoDiaMesAnterior = new Date(ano, mes, 0).getDate();
+          for (let i = diaSemanaInicio - 1; i >= 0; i--) {
+            const diaNum = ultimoDiaMesAnterior - i;
+            const dataIso = new Date(ano, mes - 1, diaNum).toISOString().substring(0, 10);
+            dias.push({ numeroDia: diaNum, dataIso, mesmoMes: false, ehHoje: false, feriado: this.obterFeriadoDoDia(dataIso) });
+          }
+          const hojeIso = new Date().toISOString().substring(0, 10);
+          for (let i = 1; i <= ultimoDia.getDate(); i++) {
+            const dataIso = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+            dias.push({ numeroDia: i, dataIso, mesmoMes: true, ehHoje: dataIso === hojeIso, feriado: this.obterFeriadoDoDia(dataIso) });
+          }
+          const restantes = (dias.length <= 35 ? 35 : 42) - dias.length;
+          for (let i = 1; i <= restantes; i++) {
+            const dataIso = new Date(ano, mes + 1, i).toISOString().substring(0, 10);
+            dias.push({ numeroDia: i, dataIso, mesmoMes: false, ehHoje: false, feriado: this.obterFeriadoDoDia(dataIso) });
+          }
+          return dias;
+        },
+
+        abrirModalNovaUnidade() { this.formUnidade = { nome_fantasia: '', tipo_unidade: 'Hospitalar' }; this.modalUnidadeAberto = true; },
+
+        async salvarUnidade() {
+          this.salvandoUnidade = true;
+          try {
+            const res = await fetch(`${API_URL}/api/unidades`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.formUnidade)
+            });
+            if (!res.ok) throw new Error('Falha ao salvar unidade.');
+            await this.carregarUnidades();
+            this.formUnidade.nome_fantasia = '';
+            this.mostrarToast('Unidade cadastrada!');
+          } catch (err) {
+            this.mostrarToast(err.message, 'erro');
+          } finally {
+            this.salvandoUnidade = false;
+          }
+        },
+
+        async excluirUnidade(id, nome) {
+          if (!confirm(`Deseja excluir a unidade "${nome}"?`)) return;
+          try {
+            const res = await fetch(`${API_URL}/api/unidades/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Não foi possível excluir a unidade.');
+            await this.carregarUnidades();
+            this.mostrarToast(`Unidade "${nome}" excluída!`);
+          } catch (err) {
+            this.mostrarToast(err.message, 'erro');
+          }
+        },
+
+        visualizarDemanda(d) {
+          this.demandaVisualizada = d;
+          this.novoDespachoSetor = this.obterSetor(d);
+          this.novoDespachoTexto = '';
+          this.modalVisualizar = true;
+        },
+
+        async salvarDespacho() {
+          if (!this.novoDespachoTexto.trim()) { this.mostrarToast('Digite o despacho antes de gravar.', 'erro'); return; }
+          this.salvandoDespacho = true;
+          try {
+            const res = await fetch(`${API_URL}/api/demandas/${this.demandaVisualizada.id}/despachos`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ texto: this.novoDespachoTexto, autor: this.novoDespachoAutor, setor: this.novoDespachoSetor })
+            });
+            if (!res.ok) throw new Error('Não foi possível gravar o despacho.');
+            const atualizada = await res.json();
+            this.demandaVisualizada.descricao = atualizada.descricao;
+            const idx = this.demandas.findIndex(d => d.id === this.demandaVisualizada.id);
+            if (idx !== -1) this.demandas[idx].descricao = atualizada.descricao;
+            this.novoDespachoTexto = '';
+            this.mostrarToast('Despacho registrado!');
+          } catch (e) {
+            this.mostrarToast(e.message, 'erro');
+          } finally {
+            this.salvandoDespacho = false;
+          }
+        },
+
+        exportarParaCSV() {
+          if (this.demandasFiltradas.length === 0) { this.mostrarToast('Não há dados filtrados para exportar.', 'info'); return; }
+          const cabecalho = ['Protocolo', 'Setor CAF', 'Origem', 'Unidade Alvo', 'Esfera Gestao', 'Eixo', 'Risco', 'Data / Prazo', 'Status', 'Responsavel', 'Link Drive'];
+          const linhas = this.demandasFiltradas.map(d => [
+            `"${d.protocolo || ''}"`, `"${this.obterSetor(d)}"`, `"${d.origem || ''}"`, `"${d.unidade_nome || 'Unidade Geral'}"`,
+            `"${this.obterEsferaGestao(d)}"`, `"${d.tipo_fiscalizacao || ''}"`, `"${d.grau_risco || ''}"`,
+            `"${this.formatarDataComHora(d.prazo_fatal, d.descricao)}"`, `"${d.status || ''}"`, `"${d.responsavel_atribuido || ''}"`, `"${this.obterLinkDrive(d) || ''}"`
+          ]);
+          const conteudo = [cabecalho.join(';'), ...linhas.map(l => l.join(';'))].join('\n');
+          const blob = new Blob(["\uFEFF" + conteudo], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.setAttribute('href', url);
+          link.setAttribute('download', `SISCAF_Relatorio_${new Date().toISOString().substring(0, 10)}.csv`);
+          document.body.appendChild(link); link.click(); document.body.removeChild(link);
+          this.mostrarToast('Relatório CSV baixado com sucesso!');
+        },
+
+        obterEsferaGestao(d) {
+          if (!d) return 'Organização Social (OS)';
+          if (d.esfera_gestao) return d.esfera_gestao;
+          if (d.descricao && d.descricao.includes('[GESTÃO: Administração Municipal (Direta)]')) return 'Administração Municipal (Direta)';
+          return 'Organização Social (OS)';
+        },
+
+        async excluirDemanda(id, protocolo) {
+          if (!confirm(`Deseja realmente excluir permanentemente "${protocolo}"?`)) return;
+          try {
+            const res = await fetch(`${API_URL}/api/demandas/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Erro ao excluir');
+            await this.carregarDemandas();
+            this.mostrarToast(`Registro "${protocolo}" excluído!`);
+          } catch (error) {
+            this.mostrarToast(error.message, 'erro');
+          }
+        },
+
+        formatarData(dataIso) {
+          if (!dataIso) return '-';
+          const [ano, mes, dia] = dataIso.substring(0, 10).split('-');
+          return `${dia}/${mes}/${ano}`;
+        },
+
+        estaVencido(dataIso, status) {
+          if (!dataIso || status === 'Concluída' || status === 'Arquivada') return false;
+          const hoje = new Date(); hoje.setHours(0,0,0,0);
+          const [ano, mes, dia] = dataIso.substring(0, 10).split('-');
+          const prazo = new Date(Number(ano), Number(mes)-1, Number(dia)); prazo.setHours(0,0,0,0);
+          return prazo < hoje;
+        },
+
+        renderizarBadgePrazo(dataIso, status) {
+          if (!dataIso) return '';
+          if (status === 'Arquivada') return `<span class="inline-flex items-center text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded"><i class="fa-solid fa-box-archive mr-1"></i> Arquivo Histórico</span>`;
+          if (status === 'Concluída') return `<span class="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">Concluída / Registrada</span>`;
+          const hoje = new Date(); hoje.setHours(0,0,0,0);
+          const [ano, mes, dia] = dataIso.substring(0, 10).split('-');
+          const prazo = new Date(Number(ano), Number(mes)-1, Number(dia)); prazo.setHours(0,0,0,0);
+          const diff = Math.round((prazo - hoje) / (1000 * 60 * 60 * 24));
+          if (diff < 0) return `<span class="inline-flex items-center text-[10px] font-bold text-rose-700 bg-rose-100 border border-rose-300 px-1.5 py-0.5 rounded"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Atrasado há ${Math.abs(diff)}d</span>`;
+          if (diff === 0) return `<span class="inline-flex items-center text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded animate-pulse"><i class="fa-solid fa-bell mr-1"></i> Vence Hoje!</span>`;
+          if (diff <= 3) return `<span class="inline-flex items-center text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">Restam ${diff}d</span>`;
+          return `<span class="inline-flex items-center text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Faltam ${diff}d</span>`;
+        }
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW:', err));
+      });
+    }
+  </script>
+</body>
+</html>
